@@ -1,1 +1,1 @@
-Sandbox for smart contracts development for CELO
+Sandbox for smart contracts development for CELO (Rev.1)
