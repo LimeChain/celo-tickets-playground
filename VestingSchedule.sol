@@ -4,6 +4,7 @@ import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "../common/UsingRegistry.sol";
 
+// Revision 1
 contract VestingSchedule is Ownable, UsingRegistry {
     // solhint-disable not-rely-on-time
 

@@ -6,6 +6,7 @@ import "../common/Initializable.sol";
 import "../common/UsingRegistry.sol";
 import "./VestingSchedule.sol";
 
+// Revision 1
 contract VestingFactory is ReentrancyGuard, Initializable, UsingRegistry {
 
     // mapping between beneficiary addresses and associated vesting contracts (schedules)
