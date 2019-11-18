@@ -1,19 +1,17 @@
 pragma solidity ^0.5.3;
 
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "../common/UsingRegistry.sol";
 
-contract VestingSchedule is Ownable, UsingRegistry {
-    // solhint-disable not-rely-on-time
+contract VestingSchedule is UsingRegistry {
 
     modifier onlyRevoker() {
-      require(msg.sender == _revoker, "sender must be the vesting revoker");
+      require(msg.sender == mRevoker, "sender must be the vesting revoker");
       _;
     }
 
     modifier onlyBeneficiary() {
-      require(msg.sender == _revoker, "sender must be the vesting beneficiary");
+      require(msg.sender == mRevoker, "sender must be the vesting beneficiary");
       _;
     }
 
@@ -29,39 +27,39 @@ contract VestingSchedule is Ownable, UsingRegistry {
     event VestingRevoked(address revoker, address refundDestination, uint256 refundDestinationAmount, uint256 timestamp);
 
     // total that is to be vested
-    uint256 public _vestingAmount;
+    uint256 public mVestingAmount;
 
     // amount that is to be vested per period
-    uint256 public __vestAmountPerPeriod;
+    uint256 public mVestAmountPerPeriod;
 
     // number of vesting periods
-    uint256 public __vestingPeriods;
+    uint256 public mVestingPeriods;
 
     // beneficiary of the amount
-    address public _beneficiary;
+    address public mBeneficiary;
 
     // durations in secs. of one period
-    uint256 public _vestingPeriodSec;
+    uint256 public mVestingPeriodSec;
 
     // timestamps for start and cliff starting points. Timestamps are expressed in UNIX time, the same units as block.timestamp.
-    uint256 public _cliffStartTime;
-    uint256 public _vestingStartTime;
+    uint256 public mCliffStartTime;
+    uint256 public mVestingStartTime;
 
     // indicates if the contract is revokable
-    bool public _revocable;
+    bool public mRevocable;
 
     // revoking address and refund destination
-    address public _refundDestination;
-    address public _revoker;
+    address public mRefundDestination;
+    address public mRevoker;
 
     // indicates how much of the vested amount has been released for withdrawal (i.e. withdrawn)
-    uint256 public _currentlyReleased;
+    uint256 public mCurrentlyReleased;
 
     // indicates if the vesting has been revoked. false by default
-    bool public _revoked;
+    bool public mRevoked;
 
     // the time at which the revocation has taken place
-    uint256 public _revokeTime;
+    uint256 public mRevokeTime;
 
     /**
      * @notice A constructor for initialising a new instance of a Vesting Schedule contract
@@ -74,7 +72,6 @@ contract VestingSchedule is Ownable, UsingRegistry {
      * @param revocable whether the vesting is revocable or not
      * @param revoker address of the person revoking the vesting
      * @param refundDestination address of the refund receiver after the vesting is deemed revoked
-     * @param vestingContractOwner the owner that of the vesting contract
      */
     constructor (address beneficiary,
                 uint256 vestingAmount,
@@ -84,38 +81,30 @@ contract VestingSchedule is Ownable, UsingRegistry {
                 uint256 vestAmountPerPeriod,
                 bool    revocable,
                 address revoker,
-                address refundDestination,               
-                address vestingContractOwner) public {
+                address refundDestination) public {
 
         // do some basic checks
         require(vestingAmount > 0, "Amount must be positive");
         require(beneficiary != address(0), "Beneficiary is the zero address");
         require(refundDestination != address(0), "Refund destination is the zero address");
-        // solhint-disable-next-line max-line-length
         require(vestingCliff <= vestingPeriodSec, "Vesting cliff is longer than duration");
-        // solhint-disable-next-line max-line-length
         require(vestingPeriodSec > 0, "Vesting period is 0 s.");
-        // solhint-disable-next-line max-line-length
         require(vestAmountPerPeriod <= vestingAmount, "Vesting amount per period is greater than the total vesting amount");
-        // solhint-disable-next-line max-line-length
-         require(vestingStartTime.add(vestingCliff) > block.timestamp, "Final time is before current time");
-
-        // transfer the ownership from the factory to the vesting owner
-        _transferOwnership(vestingContractOwner);
+        require(vestingStartTime.add(vestingCliff) > block.timestamp, "Final time is before current time");
 
         //make the vesting instance an account
         getAccounts().setAccount("unique account name", 0x0, getAccounts().getWalletAddress(beneficiary)); // TODO: check unique account name, key and wallet address(that of the beneficiary ???)
 
-        _vestingPeriods =  vestingAmount.div(vestAmountPerPeriod);
-        _beneficiary = beneficiary;
-        _vestingAmount = vestingAmount;
-        _vestAmountPerPeriod = vestAmountPerPeriod;
-        _revocable = revocable;
-        _vestingPeriodSec = vestingPeriodSec;
-        _cliffStartTime = vestingStartTime.add(vestingCliff);
-        _vestingStartTime = vestingStartTime;
-        _refundDestination = refundDestination;
-        _revoker = revoker;
+        mVestingPeriods = vestingAmount.div(vestAmountPerPeriod);
+        mBeneficiary = beneficiary;
+        mVestingAmount = vestingAmount;
+        mVestAmountPerPeriod = vestAmountPerPeriod;
+        mRevocable = revocable;
+        mVestingPeriodSec = vestingPeriodSec;
+        mCliffStartTime = vestingStartTime.add(vestingCliff);
+        mVestingStartTime = vestingStartTime;
+        mRefundDestination = refundDestination;
+        mRevoker = revoker;
     }
 
     /**
@@ -126,9 +115,9 @@ contract VestingSchedule is Ownable, UsingRegistry {
 
         require(releasableAmount > 0, "No unreleased tokens are due for withdraw");
 
-        _currentlyReleased = _currentlyReleased.add(releasableAmount);
+        mCurrentlyReleased = mCurrentlyReleased.add(releasableAmount);
 
-        getGoldToken().safeTransfer(_beneficiary, releasableAmount);
+        getGoldToken().safeTransfer(mBeneficiary, releasableAmount);
 
         emit VestingWithdrawn(msg.sender, releasableAmount, block.timestamp);
     }
@@ -140,8 +129,8 @@ contract VestingSchedule is Ownable, UsingRegistry {
      * @dev revokeTime the revocation timestamp. If is less than the current block timestamp, it is set equal
      */
     function revoke(revokeTime) external onlyRevoker {
-        require(_revocable, "Revoking is not allowed");
-        require(!_revoked, "Vesting already revoked");
+        require(mRevocable, "Revoking is not allowed");
+        require(!mRevoked, "Vesting already revoked");
 
         uint256 revokeTimestamp = revokeTime > block.timestamp ? revokeTime : block.timestamp;
 
@@ -149,20 +138,20 @@ contract VestingSchedule is Ownable, UsingRegistry {
         uint256 releasableAmount = _getReleasableAmount(revokeTimestamp);
         uint256 refund = balance.sub(releasableAmount);
 
-        _revoked = true;
-        _revokeTime = revokeTimestamp;
+        mRevoked = true;
+        mRevokeTime = revokeTimestamp;
 
-        getGoldToken().transfer(_refundDestination, refund);
+        getGoldToken().transfer(mRefundDestination, refund);
 
-        emit VestingRevoked(msg.sender, _refundDestination, refund, _revokeTime);
+        emit VestingRevoked(msg.sender, mRefundDestination, refund, mRevokeTime);
     }
 
     /**
      * @dev Calculates the amount that has already vested but hasn't been withdrawn (released) yet.
      * @param timestamp the timestamp at which the calculate the releasable amount
      */
-    function _getReleasableAmount(uint256 timestamp) private view returns (uint256) {
-        return _calculateFreeAmount(timestamp).sub(_currentlyReleased);
+    function _getReleasableAmount(uint256 timestamp) public view returns (uint256) {
+        return _calculateFreeAmount(timestamp).sub(mCurrentlyReleased);
     }
 
     /**
@@ -171,16 +160,17 @@ contract VestingSchedule is Ownable, UsingRegistry {
      */
     function _calculateFreeAmount(uint256 timestamp) private view returns (uint256) {
         uint256 currentBalance = getGoldToken().balanceOf(address(this));
-        uint256 totalBalance = currentBalance.add(_currentlyReleased);
+        uint256 totalBalance = currentBalance.add(mCurrentlyReleased);
 
-        if (timestamp < _cliffStartTime) {
+        if (timestamp < mCliffStartTime) {
             return 0;
-        } else if (timestamp >= _vestingStartTime.add( _vestingPeriods.mul(_vestingPeriodSec) ) || _revoked) {
-            return totalBalance;
-        } else {
-            uint256 gradient = (timestamp.sub(_vestingStartTime)).div(_vestingPeriodSec);
-            return  ( (currentBalance.mul(gradient)).mul(vestAmountPerPeriod) ).div(totalBalance);
         }
+        if (timestamp >= mVestingStartTime.add( mVestingPeriods.mul(mVestingPeriodSec) ) || mRevoked) {
+            return totalBalance;
+        }
+        
+        uint256 gradient = (timestamp.sub(mVestingStartTime)).div(mVestingPeriodSec);
+        return  ( (currentBalance.mul(gradient)).mul(mVestAmountPerPeriod) ).div(totalBalance);
     }
 
     /**
@@ -197,6 +187,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
 
       bool success;
       (success,) = address(getLockedGold()).lock.gas(gasleft()).value(msg.value)();
+      require(success);
       emit VestingGoldLocked(msg.value, block.timestamp);
       return success;
     }
@@ -210,6 +201,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
     function unlockGold(uint256 value) external onlyBeneficiary returns (bool) {
       bool success;
       (success,) = address(getLockedGold()).unlock.gas(gasleft()).value(msg.value)(value);
+      require(success);
       emit VestingGoldUnlocked(msg.value, block.timestamp);
       return success;
     }
@@ -223,6 +215,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
     function relockLockedGold(uint256 index) external onlyBeneficiary returns (bool) {
       bool success;
       (success,) = address(getLockedGold()).relock.gas(gasleft())(index);
+      require(success);
       emit VestingGoldRelocked(index, block.timestamp);
       return success;
     }
@@ -236,6 +229,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
     function withdrawLockedGold(uint256 index) external onlyBeneficiary returns (bool) {
       bool success;
       (success,) = address(getLockedGold()).withdraw.gas(gasleft())(index);
+      require(success);
       emit VestingGoldWithdrawn(index, block.timestamp);
       return success;
     }
@@ -251,6 +245,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
     function authorizeVoteSigner(uint8 v, bytes32 r, bytes32 s) external onlyBeneficiary returns (bool) {
       bool success;
       (success,) = address(getAccounts()).authorizeVoteSigner.gas(gasleft())(beneficiary, v, r, s);
+      require(success);
       emit VestingAccountVoterAuthorized(address(this), beneficiary, block.timestamp);
       return success;
     }
@@ -266,6 +261,7 @@ contract VestingSchedule is Ownable, UsingRegistry {
     function authorizeValidationSigner(uint8 v, bytes32 r, bytes32 s) external onlyBeneficiary returns (bool) {
       bool success;
       (success,) = address(getAccounts()).authorizeValidationSigner.gas(gasleft())(beneficiary, v, r, s);
+      require(success);
       emit VestingAccountValidatorAuthorized(address(this), beneficiary, block.timestamp);
       return success;
     }

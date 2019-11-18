@@ -39,7 +39,7 @@ contract VestingFactory is ReentrancyGuard, Initializable, UsingRegistry {
                                   address revoker,
                                   address refundDestination) public {
         // creation of a new contract
-        hasVestedAt[beneficiary] = new VestingInstance(beneficiary, vestingAmount, vestingCliff, vestingStartTime, vestingPeriodSec, vestAmountPerPeriod, revokable, revoker, refundDestination, msg.sender);
+        hasVestedAt[beneficiary] = new VestingInstance(beneficiary, vestingAmount, vestingCliff, vestingStartTime, vestingPeriodSec, vestAmountPerPeriod, revokable, revoker, refundDestination);
 
         // msg.sender (the sponsor) to fund the vesting instance
         getGoldToken().transferFrom(msg.sender, hasVestedAt[beneficiary], vestingAmount);
